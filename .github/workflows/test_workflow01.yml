@@ -4,6 +4,7 @@
 # Jobs:
 #   1. syntax-check – parse() all R scripts
 #   2. test-cleaning – install packages, run all cleaning scripts dynamically
+#   3. validation-summary – generate validation report (only if cleaning succeeds)
 #
 # Triggers:
 #   - Push to main/develop branches
@@ -28,6 +29,10 @@ on:
       - 'R_data/**'
       - '.github/workflows/**'
   workflow_dispatch:
+
+# Suppress Node 20 deprecation warning (temporary)
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
   # --------------------------------------------------------------------------
@@ -228,7 +233,7 @@ jobs:
       # --- UPLOAD OUTPUTS ---
       - name: Upload outputs
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always()  # Upload even if scripts fail, for debugging
         with:
           name: cleaning-outputs
           path: |
@@ -250,12 +255,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # --------------------------------------------------------------------------
-  # JOB 3: Validation Summary
+  # JOB 3: Validation Summary (only runs if cleaning succeeded)
   # --------------------------------------------------------------------------
   validation-summary:
     runs-on: ubuntu-22.04
     needs: test-cleaning
-    if: always() && github.ref == 'refs/heads/main'
+    # Only run this job if the test-cleaning job succeeded
+    if: always() && needs.test-cleaning.result == 'success' && github.ref == 'refs/heads/main'
     timeout-minutes: 15
 
     steps:
@@ -272,9 +278,9 @@ jobs:
           install.packages(c("tidyverse", "haven", "here"), dependencies = TRUE)
           '
 
+      # Only download if artifact exists (which it will since test-cleaning succeeded)
       - name: Download outputs
         uses: actions/download-artifact@v4
-        if: needs.test-cleaning.result == 'success'
         with:
           name: cleaning-outputs
           path: ./artifacts
