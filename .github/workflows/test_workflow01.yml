@@ -274,6 +274,7 @@ jobs:
 
       - name: Download outputs
         uses: actions/download-artifact@v4
+        if: needs.test-cleaning.result == 'success'
         with:
           name: cleaning-outputs
           path: ./artifacts
