@@ -79,6 +79,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # --- CREATE CASE-INSENSITIVE LINK FOR programs.R ---
+      - name: Create symbolic link for programs.R
+        run: |
+          cd R_scripts
+          if [ -f "programs.r" ]; then
+            echo "Creating symbolic link: programs.R -> programs.r"
+            ln -sf programs.r programs.R
+            ls -la programs.*
+          else
+            echo "Warning: programs.r not found"
+          fi
+
       # --- INSTALL SYSTEM DEPENDENCIES ---
       - name: Install system dependencies
         run: |
@@ -153,7 +165,7 @@ jobs:
           echo "Detecting R scripts in Cleaning_code/"
           echo "=========================================="
           
-          # Find all R scripts, sort them
+          # Find all R scripts (case-insensitive), sort them
           scripts=$(find . -maxdepth 1 -type f \( -iname "*.R" -o -iname "*.r" \) | sort)
           
           if [ -z "$scripts" ]; then
@@ -170,7 +182,7 @@ jobs:
           echo "Processing scripts by country"
           echo "=========================================="
           
-          # Extract country codes from script names (e.g., NGA, MWI, TZA)
+          # Extract country codes from script names (e.g., NGA, MLI, NER)
           countries=$(echo "$scripts" | grep -oE '^\./[A-Z]{3}_' | sed 's/^\.\///' | sed 's/_//' | sort -u)
           
           if [ -z "$countries" ]; then
@@ -211,6 +223,7 @@ jobs:
               for script in $sorted_scripts; do
                 echo ""
                 echo ">>> Running: $script"
+                # Run from the current directory (R_scripts/Cleaning_code)
                 Rscript --vanilla "$script"
                 if [ $? -ne 0 ]; then
                   echo "ERROR: $script failed"
