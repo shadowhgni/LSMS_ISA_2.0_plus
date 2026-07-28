@@ -154,7 +154,7 @@ jobs:
           echo "=========================================="
           
           # Find all R scripts, sort them
-          scripts=$(find . -maxdepth 1 -name "*.R" -type f | sort)
+          scripts=$(find . -maxdepth 1 -type f \( -iname "*.R" -o -iname "*.r" \) | sort)
           
           if [ -z "$scripts" ]; then
             echo "No R scripts found in Cleaning_code/"
