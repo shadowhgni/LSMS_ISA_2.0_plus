@@ -13,7 +13,7 @@ if (any(!installed)) utils::install.packages(packages[!installed])
 lapply(packages, library, character.only = TRUE)
 
 # Source helper functions
-source("R_scripts/programs.r")
+source("../programs.r")
 
 # ==============================================================================
 # 1. SET UP PATHS AND GLOBALS
