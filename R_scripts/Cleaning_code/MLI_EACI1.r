@@ -34,28 +34,90 @@ dir.create(Final_path, showWarnings = FALSE, recursive = TRUE)
 country <- "Mali"
 wave <- "EACI 14"
 temppath <- file.path("MLI", "EACI14")
+temp_dir <- file.path(Temp_path, temppath)
+dir.create(temp_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Input directory for this country/wave
+input_dir <- file.path(Input_path, country, wave)
 
 # ==============================================================================
-# 2. MASTER FRAME OF CROPS, PLOTS, AND HOUSEHOLDS
+# 2. HELPER FUNCTION: READ ZIPPED OR UNZIPPED DTA FILE
+# ==============================================================================
+
+#' Read a .dta file, handling both zipped and unzipped files
+#'
+#' @param pattern Pattern to match the file name
+#' @param input_dir Directory containing the files (may contain zip files)
+#' @param unzip_dir Directory to extract files to (default: same as input_dir)
+#' @param force_unzip If TRUE, always unzip even if dta exists
+#' @return The read data frame
+read_dta_auto <- function(pattern, input_dir, unzip_dir = NULL, force_unzip = FALSE) {
+  
+  if (is.null(unzip_dir)) {
+    unzip_dir <- input_dir
+  }
+  
+  # Ensure directories exist
+  dir.create(unzip_dir, showWarnings = FALSE, recursive = TRUE)
+  
+  # First, check if .dta file already exists (case insensitive)
+  dta_files <- list.files(unzip_dir, pattern = paste0("(?i)", pattern, "\\.dta$"), 
+                          full.names = TRUE, recursive = FALSE)
+  
+  if (length(dta_files) > 0 && !force_unzip) {
+    cat("  Found existing .dta file:", basename(dta_files[1]), "\n")
+    return(haven::read_dta(dta_files[1]))
+  }
+  
+  # If .dta doesn't exist, find the zip file
+  zip_files <- list.files(input_dir, pattern = "\\.zip$", full.names = TRUE)
+  
+  if (length(zip_files) == 0) {
+    stop("No zip files found in ", input_dir)
+  }
+  
+  # Try to extract the specific pattern from the zip
+  for (zip_file in zip_files) {
+    # List contents of zip
+    zip_contents <- unzip(zip_file, list = TRUE)$Name
+    
+    # Look for matching pattern (case insensitive)
+    matching_file <- grep(pattern, zip_contents, ignore.case = TRUE, value = TRUE)
+    
+    if (length(matching_file) > 0) {
+      cat("  Extracting", matching_file[1], "from", basename(zip_file), "\n")
+      # Extract the specific file
+      unzip(zip_file, files = matching_file[1], exdir = unzip_dir, overwrite = TRUE)
+      # Read the extracted file
+      extracted_path <- file.path(unzip_dir, matching_file[1])
+      return(haven::read_dta(extracted_path))
+    }
+  }
+  
+  # If we get here, the pattern wasn't found in any zip
+  stop("Could not find pattern '", pattern, "' in any zip file in ", input_dir)
+}
+
+# ==============================================================================
+# 3. MASTER FRAME OF CROPS, PLOTS, AND HOUSEHOLDS
 # ==============================================================================
 
 cat("\n=== Creating master frames ===\n")
 
-# 2.1 Plot-crop frame
+# 3.1 Plot-crop frame
 tryCatch({
   cat("  Creating plot-crop frame...\n")
   
   # Load perennial data
-  perennial <- haven::read_dta(file.path(Input_path, country, wave, "EACIS3B_p2.dta"))
+  perennial <- read_dta_auto("EACIS3B_p2", input_dir, temp_dir)
   
   # Filter and clean perennial data
   perennial <- perennial |>
-    dplyr::filter(!is.na(s3bq01)) |>           # Remove missing crop codes
-    dplyr::filter(s3bq03 != 2) |>              # Drop if not harvested
-    dplyr::filter(s3bq10b != 9) |>             # Drop missing conversion
+    dplyr::filter(!is.na(s3bq01)) |>
+    dplyr::filter(s3bq03 != 2) |>
+    dplyr::filter(s3bq10b != 9) |>
     dplyr::mutate(
       hhid = paste(grappe, menage, sep = "-"),
-      # Create plot_id and parcel_id for perennial crops
       n = dplyr::row_number(),
       n_str = as.character(n),
       parcel_id2 = paste0("missing_line_", n_str),
@@ -66,12 +128,11 @@ tryCatch({
       crop_name2 = haven::as_factor(crop_code) |> as.character()
     )
   
-  # Save perennial for later merge
   perennial_temp <- perennial |>
     dplyr::select(grappe, menage, crop_code, crop_name2, plot_id2, parcel_id2)
   
   # Load harvest data
-  harvest <- haven::read_dta(file.path(Input_path, country, wave, "EACIS3A_p2.dta"))
+  harvest <- read_dta_auto("EACIS3A_p2", input_dir, temp_dir)
   
   # Create hhid and plot_id
   harvest <- harvest |>
@@ -100,10 +161,6 @@ tryCatch({
     dplyr::select(hhid, plot_id, crop_name, crop_code, parcel_id) |>
     dplyr::distinct()
   
-  # Save
-  temp_dir <- file.path(Temp_path, temppath)
-  dir.create(temp_dir, showWarnings = FALSE, recursive = TRUE)
-  
   haven::write_dta(plot_crop_frame, file.path(temp_dir, "plot_crop_frame.dta"))
   cat("  ✓ plot_crop_frame saved\n")
   
@@ -111,12 +168,11 @@ tryCatch({
   cat("  ✗ Error in plot-crop frame: ", e$message, "\n")
 })
 
-# 2.2 Household frame
+# 3.2 Household frame
 tryCatch({
   cat("  Creating household frame...\n")
   
-  # Load cover data
-  cover <- haven::read_dta(file.path(Input_path, country, wave, "EACICONTROLE_p1.dta"))
+  cover <- read_dta_auto("EACICONTROLE_p1", input_dir, temp_dir)
   
   hh_frame <- cover |>
     dplyr::mutate(hhid = paste(grappe, menage, sep = "-")) |>
@@ -130,11 +186,11 @@ tryCatch({
   cat("  ✗ Error in household frame: ", e$message, "\n")
 })
 
-# 2.3 Individual frame
+# 3.3 Individual frame
 tryCatch({
   cat("  Creating individual frame...\n")
   
-  indiv <- haven::read_dta(file.path(Input_path, country, wave, "EACIIND_p1.dta"))
+  indiv <- read_dta_auto("EACIIND_p1", input_dir, temp_dir)
   
   indiv_frame <- indiv |>
     dplyr::mutate(
@@ -152,21 +208,21 @@ tryCatch({
 })
 
 # ==============================================================================
-# 3. VARIABLE EXTRACTION
+# 4. VARIABLE EXTRACTION
 # ==============================================================================
 
 cat("\n=== Extracting variables ===\n")
 
-# 3.1 EA (Enumeration Area)
+# 4.1 EA (Enumeration Area)
 tryCatch({
   cat("  Extracting EA...\n")
   
-  cover <- haven::read_dta(file.path(Input_path, country, wave, "EACICONTROLE_p1.dta"))
+  cover <- read_dta_auto("EACICONTROLE_p1", input_dir, temp_dir)
   
   ea_id <- cover |>
     dplyr::mutate(
       hhid = paste(grappe, menage, sep = "-"),
-      ea_id = as.character(grappe)  # In Mali, grappe is the EA
+      ea_id = as.character(grappe)
     ) |>
     dplyr::select(hhid, ea_id) |>
     dplyr::distinct()
@@ -178,49 +234,49 @@ tryCatch({
   cat("  ✗ Error in EA extraction: ", e$message, "\n")
 })
 
-# 3.2 Strata
+# 4.2 Strata
 tryCatch({
   cat("  Extracting strata...\n")
   
   # Load strata from wave 2 (EACI17) since wave 1 doesn't have it directly
-  weights <- haven::read_dta(file.path(Input_path, country, "EACI 17", "EACI17_ECHANTILLON.dta"))
-  cover <- haven::read_dta(file.path(Input_path, country, wave, "EACICONTROLE_p1.dta"))
-  
-  # Merge to get strata
-  strata <- weights |>
-    dplyr::select(grappe, strate) |>
-    dplyr::distinct() |>
-    dplyr::right_join(cover, by = "grappe") |>
-    dplyr::mutate(
-      hhid = paste(grappe, menage, sep = "-"),
-      strataid = strate
-    ) |>
-    dplyr::select(hhid, strataid) |>
-    dplyr::distinct()
-  
-  # Fill missing strata using admin levels
-  # (Simplified - full logic would use admin_2 and s00q04)
-  
-  haven::write_dta(strata, file.path(temp_dir, "strataid.dta"))
-  cat("  ✓ strataid saved\n")
+  wave2_dir <- file.path(Input_path, country, "EACI 17")
+  if (dir.exists(wave2_dir)) {
+    weights <- read_dta_auto("EACI17_ECHANTILLON", wave2_dir, temp_dir)
+    
+    cover <- read_dta_auto("EACICONTROLE_p1", input_dir, temp_dir)
+    
+    strata <- weights |>
+      dplyr::select(grappe, strate) |>
+      dplyr::distinct() |>
+      dplyr::right_join(cover, by = "grappe") |>
+      dplyr::mutate(
+        hhid = paste(grappe, menage, sep = "-"),
+        strataid = strate
+      ) |>
+      dplyr::select(hhid, strataid) |>
+      dplyr::distinct()
+    
+    haven::write_dta(strata, file.path(temp_dir, "strataid.dta"))
+    cat("  ✓ strataid saved\n")
+  } else {
+    cat("  ℹ Wave 2 directory not found, skipping strata\n")
+  }
   
 }, error = function(e) {
   cat("  ✗ Error in strata extraction: ", e$message, "\n")
 })
 
-# 3.3 Administrative levels
+# 4.3 Administrative levels
 tryCatch({
   cat("  Extracting administrative levels...\n")
   
-  cover <- haven::read_dta(file.path(Input_path, country, wave, "EACICONTROLE_p1.dta"))
+  cover <- read_dta_auto("EACICONTROLE_p1", input_dir, temp_dir)
   
   # Admin 1
   admin1 <- cover |>
     dplyr::mutate(
       hhid = paste(grappe, menage, sep = "-"),
-      admin_1 = s00q01
-    ) |>
-    dplyr::mutate(
+      admin_1 = s00q01,
       admin_1_name = haven::as_factor(admin_1) |> as.character()
     ) |>
     dplyr::select(hhid, admin_1, admin_1_name) |>
@@ -256,16 +312,16 @@ tryCatch({
   cat("  ✗ Error in admin levels: ", e$message, "\n")
 })
 
-# 3.4 Urban/rural
+# 4.4 Urban/rural
 tryCatch({
   cat("  Extracting urban/rural...\n")
   
-  cover <- haven::read_dta(file.path(Input_path, country, wave, "EACICONTROLE_p1.dta"))
+  cover <- read_dta_auto("EACICONTROLE_p1", input_dir, temp_dir)
   
   urban <- cover |>
     dplyr::mutate(
       hhid = paste(grappe, menage, sep = "-"),
-      urban = dplyr::if_else(s00q04 == 1, 1, 0)  # 1=Yes (urban), 0=No (rural)
+      urban = dplyr::if_else(s00q04 == 1, 1, 0)
     ) |>
     dplyr::select(hhid, urban) |>
     dplyr::distinct()
@@ -277,11 +333,11 @@ tryCatch({
   cat("  ✗ Error in urban/rural: ", e$message, "\n")
 })
 
-# 3.5 Weights
+# 4.5 Weights
 tryCatch({
   cat("  Extracting weights...\n")
   
-  weights <- haven::read_dta(file.path(Input_path, country, wave, "EACIPOIDS.dta"))
+  weights <- read_dta_auto("EACIPOIDS", input_dir, temp_dir)
   
   weights_out <- weights |>
     dplyr::mutate(
@@ -298,11 +354,11 @@ tryCatch({
   cat("  ✗ Error in weights: ", e$message, "\n")
 })
 
-# 3.6 Planting month
+# 4.6 Planting month
 tryCatch({
   cat("  Extracting planting month...\n")
   
-  plot_inputs <- haven::read_dta(file.path(Input_path, country, wave, "EACICULTURE_p1.dta"))
+  plot_inputs <- read_dta_auto("EACICULTURE_p1", input_dir, temp_dir)
   
   planting_month <- plot_inputs |>
     dplyr::mutate(
@@ -316,7 +372,6 @@ tryCatch({
     ) |>
     dplyr::select(hhid, plot_id, crop_code, planting_month) |>
     dplyr::distinct() |>
-    # Collapse to min planting month per plot-crop
     dplyr::group_by(hhid, crop_code, plot_id) |>
     dplyr::summarise(planting_month = min(planting_month, na.rm = TRUE), .groups = "drop")
   
@@ -327,11 +382,11 @@ tryCatch({
   cat("  ✗ Error in planting month: ", e$message, "\n")
 })
 
-# 3.7 Harvest end month
+# 4.7 Harvest end month
 tryCatch({
   cat("  Extracting harvest end month...\n")
   
-  harvest <- haven::read_dta(file.path(Input_path, country, wave, "EACIS3A_p2.dta"))
+  harvest <- read_dta_auto("EACIS3A_p2", input_dir, temp_dir)
   
   harvest_end_month <- harvest |>
     dplyr::mutate(
@@ -346,7 +401,6 @@ tryCatch({
     ) |>
     dplyr::select(hhid, plot_id, crop_code, harvest_end_month) |>
     dplyr::distinct() |>
-    # Collapse to max harvest end month
     dplyr::group_by(hhid, crop_code, plot_id) |>
     dplyr::summarise(harvest_end_month = max(harvest_end_month, na.rm = TRUE), .groups = "drop")
   
@@ -357,11 +411,11 @@ tryCatch({
   cat("  ✗ Error in harvest end month: ", e$message, "\n")
 })
 
-# 3.8 Harvest interview month
+# 4.8 Harvest interview month
 tryCatch({
   cat("  Extracting harvest interview month...\n")
   
-  cover2 <- haven::read_dta(file.path(Input_path, country, wave, "EACICONTROLE_p2.dta"))
+  cover2 <- read_dta_auto("EACICONTROLE_p2", input_dir, temp_dir)
   
   harvest_interview_month <- cover2 |>
     dplyr::mutate(
@@ -380,11 +434,11 @@ tryCatch({
   cat("  ✗ Error in harvest interview month: ", e$message, "\n")
 })
 
-# 3.9 Planting interview month
+# 4.9 Planting interview month
 tryCatch({
   cat("  Extracting planting interview month...\n")
   
-  cover2 <- haven::read_dta(file.path(Input_path, country, wave, "EACICONTROLE_p2.dta"))
+  cover2 <- read_dta_auto("EACICONTROLE_p2", input_dir, temp_dir)
   
   planting_interview_month <- cover2 |>
     dplyr::mutate(
@@ -404,17 +458,17 @@ tryCatch({
 })
 
 # ==============================================================================
-# 4. HARVEST QUANTITY AND SHOCKS
+# 5. HARVEST QUANTITY AND SHOCKS
 # ==============================================================================
 
 cat("\n=== Processing harvest data ===\n")
 
-# 4.1 Harvest kg
+# 5.1 Harvest kg
 tryCatch({
   cat("  Calculating harvest kg...\n")
   
   # Load perennial data with conversion factors
-  perennial <- haven::read_dta(file.path(Input_path, country, wave, "EACIS3B_p2.dta")) |>
+  perennial <- read_dta_auto("EACIS3B_p2", input_dir, temp_dir) |>
     dplyr::filter(!is.na(s3bq01)) |>
     dplyr::filter(s3bq03 != 2) |>
     dplyr::filter(s3bq10b != 9) |>
@@ -431,7 +485,7 @@ tryCatch({
     dplyr::select(grappe, menage, crop_code, harvest_kg_per, plot_id2)
   
   # Load harvest data
-  harvest <- haven::read_dta(file.path(Input_path, country, wave, "EACIS3A_p2.dta")) |>
+  harvest <- read_dta_auto("EACIS3A_p2", input_dir, temp_dir) |>
     dplyr::mutate(
       hhid = paste(grappe, menage, sep = "-"),
       plot_id = paste(grappe, menage, s3aq01, s3aq02, sep = "-")
@@ -442,12 +496,10 @@ tryCatch({
       by = c("grappe", "menage", "crop_code")
     ) |>
     dplyr::mutate(
-      # Calculate conversion factors
       CF = s3aq08c / s3aq08a,
       conversion = s3aq08c,
       unit = s3aq08b
     ) |>
-    # Calculate median conversion by grappe and unit
     dplyr::group_by(grappe, unit) |>
     dplyr::mutate(
       conversion = dplyr::if_else(!is.na(CF) & CF == dplyr::first(CF), CF, conversion),
@@ -461,8 +513,7 @@ tryCatch({
       harvest_kg = s3aq08a * conversion,
       harvest_kg = dplyr::if_else(s3aq08a == 9999, NA_real_, harvest_kg),
       harvest_kg = dplyr::if_else(!is.na(harvest_kg_per), harvest_kg_per, harvest_kg),
-      # Unit-specific conversions
-      harvest_kg = dplyr::if_else(unit == 1, s3aq08a, harvest_kg),  # kg
+      harvest_kg = dplyr::if_else(unit == 1, s3aq08a, harvest_kg),
       harvest_kg = dplyr::if_else(unit == 2 & s3aq08c < 100, s3aq08a * 100, harvest_kg),
       harvest_kg = dplyr::if_else(unit == 2 & conversion %in% c(100, 250, 300, 450), 
                                   s3aq08c, harvest_kg),
@@ -471,7 +522,6 @@ tryCatch({
       harvest_kg = dplyr::if_else(unit == 2 & s3aq08c < 35, s3aq08a * 100, harvest_kg),
       harvest_kg = dplyr::if_else(unit == 4 & s3aq08c > 120, s3aq08c, harvest_kg),
       harvest_kg = dplyr::if_else(s3aq08a == 0 | s3aq10 == 10, 0, harvest_kg),
-      # Adjust for crop loss
       harvest_kg = dplyr::if_else(s3aq06 < 100 & s3aq05 == 2,
                                   harvest_kg / (1 - s3aq06/100),
                                   harvest_kg)
@@ -512,33 +562,28 @@ tryCatch({
   cat("  ✗ Error in harvest kg: ", e$message, "\n")
 })
 
-# 4.2 Crop shocks
+# 5.2 Crop shocks
 tryCatch({
   cat("  Extracting crop shocks...\n")
   
-  harvest <- haven::read_dta(file.path(Input_path, country, wave, "EACIS3A_p2.dta"))
+  harvest <- read_dta_auto("EACIS3A_p2", input_dir, temp_dir)
   
   crop_shock <- harvest |>
     dplyr::mutate(
       hhid = paste(grappe, menage, sep = "-"),
       plot_id = paste(grappe, menage, s3aq01, s3aq02, sep = "-"),
       crop_code = s3aq03b,
-      # Crop shock
       crop_shock = dplyr::if_else(s3aq09 == 1, 1,
                                   dplyr::if_else(s3aq09 == 2, 0, NA_real_)),
-      # Drought shock
       drought_shock = dplyr::if_else(s3aq11 == 1, 1,
                                      dplyr::if_else(s3aq11 %in% c(2:9), 0, NA_real_)),
       drought_shock = dplyr::if_else(s3aq09 == 2, 0, drought_shock),
-      # Rain shock
       rain_shock = dplyr::if_else(s3aq11 == 2, 1,
                                   dplyr::if_else(s3aq11 %in% c(1, 3:9), 0, NA_real_)),
       rain_shock = dplyr::if_else(s3aq09 == 2, 0, rain_shock),
-      # Pests shock
       pests_shock = dplyr::if_else(s3aq11 == 5, 1,
                                    dplyr::if_else(s3aq11 %in% c(1:4, 6:9), 0, NA_real_)),
       pests_shock = dplyr::if_else(s3aq09 == 2, 0, pests_shock),
-      # Percent lost
       pct_lost = dplyr::if_else(s3aq10 <= 10, s3aq10 * 10, NA_real_),
       pct_lost = dplyr::if_else(s3aq09 == 2, 0, pct_lost),
       pct_lost = pct_lost / 100
@@ -551,10 +596,7 @@ tryCatch({
       drought_shock = max(drought_shock, na.rm = TRUE),
       pct_lost = mean(pct_lost, na.rm = TRUE),
       .groups = "drop"
-    )
-  
-  # Handle cases where all NAs
-  crop_shock <- crop_shock |>
+    ) |>
     dplyr::mutate(
       crop_shock = dplyr::if_else(is.infinite(crop_shock), NA_real_, crop_shock),
       pests_shock = dplyr::if_else(is.infinite(pests_shock), NA_real_, pests_shock),
@@ -570,17 +612,16 @@ tryCatch({
 })
 
 # ==============================================================================
-# 5. HARVEST VALUE AND MAIN CROP
+# 6. HARVEST VALUE AND MAIN CROP
 # ==============================================================================
 
 cat("\n=== Calculating harvest values ===\n")
 
-# 5.1 Harvest value
+# 6.1 Harvest value
 tryCatch({
   cat("  Calculating harvest value...\n")
   
-  # Load perennial data
-  perennial <- haven::read_dta(file.path(Input_path, country, wave, "EACIS3B_p2.dta")) |>
+  perennial <- read_dta_auto("EACIS3B_p2", input_dir, temp_dir) |>
     dplyr::filter(!is.na(s3bq01)) |>
     dplyr::filter(s3bq03 != 2) |>
     dplyr::filter(s3bq10b != 9) |>
@@ -591,8 +632,7 @@ tryCatch({
     ) |>
     dplyr::rename(crop_code = s3bq01)
   
-  # Load harvest data
-  harvest <- haven::read_dta(file.path(Input_path, country, wave, "EACIS3A_p2.dta")) |>
+  harvest <- read_dta_auto("EACIS3A_p2", input_dir, temp_dir) |>
     dplyr::mutate(
       hhid = paste(grappe, menage, sep = "-"),
       plot_id = paste(grappe, menage, s3aq01, s3aq02, sep = "-")
@@ -609,7 +649,6 @@ tryCatch({
     dplyr::distinct()
   
   # Calculate harvest value using median crop prices
-  # This calls the valuation_median_crops function from programs.r
   harvest_value <- valuation_median_crops(
     data = harvest,
     temp_path = temp_dir,
@@ -624,7 +663,6 @@ tryCatch({
     cropvar_var = "crop_code"
   )
   
-  # Select relevant columns
   harvest_value_out <- harvest_value |>
     dplyr::select(hhid, plot_id, harvest_value, crop_code, main_crop)
   
@@ -635,11 +673,11 @@ tryCatch({
   cat("  ✗ Error in harvest value: ", e$message, "\n")
 })
 
-# 5.2 Intercropped
+# 6.2 Intercropped
 tryCatch({
   cat("  Extracting intercropped status...\n")
   
-  plot_inputs <- haven::read_dta(file.path(Input_path, country, wave, "EACICULTURE_p1.dta"))
+  plot_inputs <- read_dta_auto("EACICULTURE_p1", input_dir, temp_dir)
   
   intercropped <- plot_inputs |>
     dplyr::mutate(
@@ -665,11 +703,11 @@ tryCatch({
   cat("  ✗ Error in intercropped: ", e$message, "\n")
 })
 
-# 5.3 Number of seasonal crops
+# 6.3 Number of seasonal crops
 tryCatch({
   cat("  Calculating number of seasonal crops...\n")
   
-  harvest <- haven::read_dta(file.path(Input_path, country, wave, "EACIS3A_p2.dta"))
+  harvest <- read_dta_auto("EACIS3A_p2", input_dir, temp_dir)
   
   nb_seasonal_crop <- harvest |>
     dplyr::mutate(
@@ -688,66 +726,8 @@ tryCatch({
   cat("  ✗ Error in nb_seasonal_crop: ", e$message, "\n")
 })
 
-# 5.4 Main crop shares
-tryCatch({
-  cat("  Calculating main crop shares...\n")
-  
-  # Load harvest value
-  harvest_value <- haven::read_dta(file.path(temp_dir, "harvest_value.dta"))
-  
-  # Load harvest data
-  harvest <- haven::read_dta(file.path(Input_path, country, wave, "EACIS3A_p2.dta")) |>
-    dplyr::mutate(
-      hhid = paste(grappe, menage, sep = "-"),
-      plot_id = paste(grappe, menage, s3aq01, s3aq02, sep = "-")
-    ) |>
-    dplyr::rename(crop_code = s3aq03b)
-  
-  # Merge with harvest value
-  main_crop_data <- harvest |>
-    dplyr::left_join(harvest_value, by = c("hhid", "plot_id", "crop_code"))
-  
-  # Calculate total value per plot
-  main_crop_data <- main_crop_data |>
-    dplyr::group_by(plot_id) |>
-    dplyr::mutate(
-      total_value_plot = sum(harvest_value, na.rm = TRUE),
-      maincrop_valueshare_temp = dplyr::if_else(
-        crop_code == main_crop,
-        harvest_value / total_value_plot,
-        NA_real_
-      ),
-      maincrop_valueshare = max(maincrop_valueshare_temp, na.rm = TRUE)
-    ) |>
-    dplyr::ungroup()
-  
-  # Create crop group variables (simplified for Mali)
-  # In the full version, this would involve decoding crop codes
-  # and mapping to the 11 crop categories
-  
-  # For now, create a simplified version
-  main_crop_out <- main_crop_data |>
-    dplyr::group_by(plot_id, main_crop, maincrop_valueshare) |>
-    dplyr::summarise(
-      .groups = "drop"
-    ) |>
-    dplyr::mutate(
-      maincrop_valueshare = dplyr::if_else(is.infinite(maincrop_valueshare), 
-                                           NA_real_, maincrop_valueshare)
-    )
-  
-  # Add contains_crop and share_crop variables (simplified)
-  # Full implementation would require crop code mapping
-  
-  haven::write_dta(main_crop_out, file.path(temp_dir, "main_crop.dta"))
-  cat("  ✓ main_crop saved\n")
-  
-}, error = function(e) {
-  cat("  ✗ Error in main crop: ", e$message, "\n")
-})
-
 # ==============================================================================
-# 6. LAND AREA
+# 7. LAND AREA
 # ==============================================================================
 
 cat("\n=== Processing land area ===\n")
@@ -755,9 +735,7 @@ cat("\n=== Processing land area ===\n")
 tryCatch({
   cat("  Calculating plot area...\n")
   
-  plot_roster <- haven::read_dta(file.path(Input_path, country, wave, "EACIEXPLOI_p1.dta"))
-  
-  # Load admin3 for imputation
+  plot_roster <- read_dta_auto("EACIEXPLOI_p1", input_dir, temp_dir)
   admin3 <- haven::read_dta(file.path(temp_dir, "admin3.dta"))
   
   land_area <- plot_roster |>
@@ -772,9 +750,6 @@ tryCatch({
     dplyr::left_join(admin3, by = "hhid")
   
   # Impute missing GPS area using self-reported area
-  # Using a simplified imputation - in full version, use multiple imputation
-  
-  # Get median ratio by admin3
   imputation_ratios <- land_area |>
     dplyr::filter(!is.na(plot_area_GPS) & !is.na(area_self_reported) & area_self_reported > 0) |>
     dplyr::group_by(admin_3) |>
@@ -783,7 +758,6 @@ tryCatch({
       .groups = "drop"
     )
   
-  # Apply imputation
   land_area <- land_area |>
     dplyr::left_join(imputation_ratios, by = "admin_3") |>
     dplyr::mutate(
@@ -794,7 +768,6 @@ tryCatch({
       )
     )
   
-  # Calculate farm size
   land_area <- land_area |>
     dplyr::group_by(hhid) |>
     dplyr::mutate(
@@ -814,21 +787,20 @@ tryCatch({
 })
 
 # ==============================================================================
-# 7. CONTINUE WITH REMAINING VARIABLES
+# 8. CONTINUE WITH REMAINING VARIABLES
 # ==============================================================================
 
 cat("\n=== Processing remaining variables ===\n")
 
-# 7.1 Improved seeds
+# 8.1 Improved seeds
 tryCatch({
   cat("  Extracting improved seed status...\n")
   
-  seeds <- haven::read_dta(file.path(Input_path, country, wave, "EACIS1E_p2.dta"))
+  seeds <- read_dta_auto("EACIS1E_p2", input_dir, temp_dir)
   
   improved <- seeds |>
     dplyr::mutate(
       hhid = paste(grappe, menage, sep = "-"),
-      # s1eq01 and s1eq02 are plot identifiers in the seeds module
       plot_id = paste(grappe, menage, s1eq01, s1eq02, sep = "-"),
       crop_code = s1eq03b,
       improved = dplyr::case_when(
@@ -848,11 +820,11 @@ tryCatch({
   cat("  ✗ Error in improved seeds: ", e$message, "\n")
 })
 
-# 7.2 Seed kg
+# 8.2 Seed kg
 tryCatch({
   cat("  Calculating seed kg...\n")
   
-  seeds <- haven::read_dta(file.path(Input_path, country, wave, "EACIS1E_p2.dta"))
+  seeds <- read_dta_auto("EACIS1E_p2", input_dir, temp_dir)
   
   seed_kg <- seeds |>
     dplyr::mutate(
@@ -860,12 +832,10 @@ tryCatch({
       plot_id = paste(grappe, menage, s1eq01, s1eq02, sep = "-"),
       crop_code = s1eq03b,
       ea_id = as.character(grappe),
-      # Calculate seed kg (simplified conversion)
       seed_kg_temp = dplyr::if_else(s1eq10b == 2, s1eq10a, NA_real_),
       seed_gram = dplyr::if_else(s1eq10b == 1, s1eq10a * 0.001, NA_real_),
       seed_kg = dplyr::coalesce(seed_kg_temp, seed_gram),
       seed_kg = dplyr::if_else(seed_kg >= 9999, NA_real_, seed_kg),
-      # Also use s1eq05a if available
       seed_kg = dplyr::if_else(is.na(seed_kg) & !is.na(s1eq05a), 
                                s1eq05a, seed_kg),
       seed_kg = dplyr::if_else(is.na(seed_kg) & !is.na(s1eq05a) & s1eq05b == 1,
@@ -892,11 +862,11 @@ tryCatch({
   cat("  ✗ Error in seed kg: ", e$message, "\n")
 })
 
-# 7.3 Seed value
+# 8.3 Seed value
 tryCatch({
   cat("  Calculating seed value...\n")
   
-  seeds <- haven::read_dta(file.path(Input_path, country, wave, "EACIS1E_p2.dta"))
+  seeds <- read_dta_auto("EACIS1E_p2", input_dir, temp_dir)
   
   seed_value <- seeds |>
     dplyr::mutate(
@@ -949,41 +919,51 @@ tryCatch({
 })
 
 # ==============================================================================
-# 8. LABOR DAYS
+# 9. CLEAN UP: REMOVE EXTRACTED FILES (KEEP ONLY ZIP)
 # ==============================================================================
 
-cat("\n=== Processing labor data ===\n")
+cat("\n=== Cleaning up extracted files ===\n")
 
-# Note: Labor processing is complex and involves multiple files.
-# I'll provide a skeleton that can be expanded.
+# Get all files in the input directory
+all_files <- list.files(input_dir, full.names = TRUE)
 
-tryCatch({
-  cat("  Processing labor days (this is complex - skeleton provided)...\n")
-  
-  # This would involve:
-  # 1. Loading labor files (EACIMAINOUVRE_p1.dta, EACIS2F_p2.dta)
-  # 2. Calculating family, hired, and other labor days
-  # 3. Valuing hired labor using median wages
-  # 4. Aggregating across PP and PH components
-  
-  # For now, create placeholder
-  labor_days <- data.frame(
-    plot_id = character(),
-    total_labor_days = numeric(),
-    total_family_labor_days = numeric(),
-    total_hired_labor_days = numeric(),
-    hired_labor_value = numeric()
-  )
-  
-  haven::write_dta(labor_days, file.path(temp_dir, "labor_days.dta"))
-  cat("  ✓ labor_days placeholder saved\n")
-  
-}, error = function(e) {
-  cat("  ✗ Error in labor processing: ", e$message, "\n")
-})
+# Keep only zip files (case insensitive)
+zip_pattern <- "\\.zip$"
+del_files <- all_files[!grepl(zip_pattern, all_files, ignore.case = TRUE)]
+
+if (length(del_files) > 0) {
+  cat("  Removing extracted files:\n")
+  for (f in del_files) {
+    cat("    -", basename(f), "\n")
+    unlink(f, recursive = TRUE, force = TRUE)
+  }
+  cat("  ✓ Cleanup complete\n")
+} else {
+  cat("  No extracted files to remove\n")
+}
 
 # ==============================================================================
-# 9. FINAL OUTPUT
+# 10. CLEAN TEMP DIRECTORY
+# ==============================================================================
+
+cat("\n=== Cleaning temporary directory ===\n")
+
+# Remove all files in temp_dir but keep the directory structure
+temp_files <- list.files(temp_dir, full.names = TRUE, recursive = TRUE)
+
+if (length(temp_files) > 0) {
+  cat("  Removing temporary files:\n")
+  for (f in temp_files) {
+    cat("    -", basename(f), "\n")
+    unlink(f, recursive = TRUE, force = TRUE)
+  }
+  cat("  ✓ Temp directory cleaned\n")
+} else {
+  cat("  No temporary files to remove\n")
+}
+
+# ==============================================================================
+# 11. FINAL OUTPUT
 # ==============================================================================
 
 cat("\n=== MLI_EACI1 processing complete ===\n")

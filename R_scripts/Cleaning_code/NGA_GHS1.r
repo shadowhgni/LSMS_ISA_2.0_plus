@@ -39,18 +39,79 @@ temppath <- file.path("NGA", "GHS10")
 temp_dir <- file.path(Temp_path, temppath)
 dir.create(temp_dir, showWarnings = FALSE, recursive = TRUE)
 
+# Input directory for this country/wave
+input_dir <- file.path(Input_path, country, wave)
+
 # ==============================================================================
-# 2. MASTER FRAME OF CROPS, PLOTS, AND HOUSEHOLDS
+# 2. HELPER FUNCTION: READ ZIPPED OR UNZIPPED DTA FILE
+# ==============================================================================
+
+#' Read a .dta file, handling both zipped and unzipped files
+#'
+#' @param pattern Pattern to match the file name
+#' @param input_dir Directory containing the files (may contain zip files)
+#' @param unzip_dir Directory to extract files to (default: same as input_dir)
+#' @param force_unzip If TRUE, always unzip even if dta exists
+#' @return The read data frame
+read_dta_auto <- function(pattern, input_dir, unzip_dir = NULL, force_unzip = FALSE) {
+  
+  if (is.null(unzip_dir)) {
+    unzip_dir <- input_dir
+  }
+  
+  # Ensure directories exist
+  dir.create(unzip_dir, showWarnings = FALSE, recursive = TRUE)
+  
+  # First, check if .dta file already exists (case insensitive)
+  dta_files <- list.files(unzip_dir, pattern = paste0("(?i)", pattern, "\\.dta$"), 
+                          full.names = TRUE, recursive = FALSE)
+  
+  if (length(dta_files) > 0 && !force_unzip) {
+    cat("  Found existing .dta file:", basename(dta_files[1]), "\n")
+    return(haven::read_dta(dta_files[1]))
+  }
+  
+  # If .dta doesn't exist, find the zip file
+  zip_files <- list.files(input_dir, pattern = "\\.zip$", full.names = TRUE)
+  
+  if (length(zip_files) == 0) {
+    stop("No zip files found in ", input_dir)
+  }
+  
+  # Try to extract the specific pattern from the zip
+  for (zip_file in zip_files) {
+    # List contents of zip
+    zip_contents <- unzip(zip_file, list = TRUE)$Name
+    
+    # Look for matching pattern (case insensitive)
+    matching_file <- grep(pattern, zip_contents, ignore.case = TRUE, value = TRUE)
+    
+    if (length(matching_file) > 0) {
+      cat("  Extracting", matching_file[1], "from", basename(zip_file), "\n")
+      # Extract the specific file
+      unzip(zip_file, files = matching_file[1], exdir = unzip_dir, overwrite = TRUE)
+      # Read the extracted file
+      extracted_path <- file.path(unzip_dir, matching_file[1])
+      return(haven::read_dta(extracted_path))
+    }
+  }
+  
+  # If we get here, the pattern wasn't found in any zip
+  stop("Could not find pattern '", pattern, "' in any zip file in ", input_dir)
+}
+
+# ==============================================================================
+# 3. MASTER FRAME OF CROPS, PLOTS, AND HOUSEHOLDS
 # ==============================================================================
 
 cat("\n=== Creating master frames ===\n")
 
-# 2.1 Plot-crop frame
+# 3.1 Plot-crop frame
 tryCatch({
   cat("  Creating plot-crop frame...\n")
   
   # Load harvest data
-  harvest <- haven::read_dta(file.path(Input_path, country, wave, "secta3_harvestw1.dta"))
+  harvest <- read_dta_auto("secta3_harvestw1", input_dir, temp_dir)
   
   # Clean and create plot-crop frame
   plot_crop_frame <- harvest |>
@@ -90,11 +151,11 @@ tryCatch({
   cat("  ✗ Error in plot-crop frame: ", e$message, "\n")
 })
 
-# 2.2 Household frame
+# 3.2 Household frame
 tryCatch({
   cat("  Creating household frame...\n")
   
-  cover <- haven::read_dta(file.path(Input_path, country, wave, "secta_plantingw1.dta"))
+  cover <- read_dta_auto("secta_plantingw1", input_dir, temp_dir)
   
   hh_frame <- cover |>
     dplyr::select(hhid) |>
@@ -107,13 +168,13 @@ tryCatch({
   cat("  ✗ Error in household frame: ", e$message, "\n")
 })
 
-# 2.3 Individual frame
+# 3.3 Individual frame
 tryCatch({
   cat("  Creating individual frame...\n")
   
   # Load individual data
-  indiv1 <- haven::read_dta(file.path(Input_path, country, wave, "sect1_plantingw1.dta"))
-  indiv2 <- haven::read_dta(file.path(Input_path, country, wave, "sect2a_harvestw1.dta"))
+  indiv1 <- read_dta_auto("sect1_plantingw1", input_dir, temp_dir)
+  indiv2 <- read_dta_auto("sect2a_harvestw1", input_dir, temp_dir)
   
   indiv_frame <- indiv1 |>
     dplyr::inner_join(indiv2, by = c("hhid", "indiv")) |>
@@ -132,16 +193,16 @@ tryCatch({
 })
 
 # ==============================================================================
-# 3. VARIABLE EXTRACTION
+# 4. VARIABLE EXTRACTION
 # ==============================================================================
 
 cat("\n=== Extracting variables ===\n")
 
-# 3.1 EA
+# 4.1 EA
 tryCatch({
   cat("  Extracting EA...\n")
   
-  cover <- haven::read_dta(file.path(Input_path, country, wave, "secta_plantingw1.dta"))
+  cover <- read_dta_auto("secta_plantingw1", input_dir, temp_dir)
   
   ea_id <- cover |>
     dplyr::mutate(
@@ -157,11 +218,11 @@ tryCatch({
   cat("  ✗ Error in EA extraction: ", e$message, "\n")
 })
 
-# 3.2 Strata
+# 4.2 Strata
 tryCatch({
   cat("  Extracting strata...\n")
   
-  cover <- haven::read_dta(file.path(Input_path, country, wave, "secta_plantingw1.dta"))
+  cover <- read_dta_auto("secta_plantingw1", input_dir, temp_dir)
   
   strata <- cover |>
     dplyr::rename(strataid = zone) |>
@@ -175,11 +236,11 @@ tryCatch({
   cat("  ✗ Error in strata extraction: ", e$message, "\n")
 })
 
-# 3.3 Administrative levels
+# 4.3 Administrative levels
 tryCatch({
   cat("  Extracting administrative levels...\n")
   
-  cover <- haven::read_dta(file.path(Input_path, country, wave, "secta_plantingw1.dta"))
+  cover <- read_dta_auto("secta_plantingw1", input_dir, temp_dir)
   
   # Admin 1 (Zone)
   admin1 <- cover |>
@@ -220,11 +281,11 @@ tryCatch({
   cat("  ✗ Error in admin levels: ", e$message, "\n")
 })
 
-# 3.4 Urban/rural
+# 4.4 Urban/rural
 tryCatch({
   cat("  Extracting urban/rural...\n")
   
-  cover <- haven::read_dta(file.path(Input_path, country, wave, "secta_plantingw1.dta"))
+  cover <- read_dta_auto("secta_plantingw1", input_dir, temp_dir)
   
   urban <- cover |>
     dplyr::mutate(
@@ -240,13 +301,13 @@ tryCatch({
   cat("  ✗ Error in urban/rural: ", e$message, "\n")
 })
 
-# 3.5 Weights
+# 4.5 Weights
 tryCatch({
   cat("  Extracting weights...\n")
   
   # Load consumption aggregates
-  csption1 <- haven::read_dta(file.path(Input_path, country, wave, "cons_agg_wave1_visit1.dta"))
-  csption2 <- haven::read_dta(file.path(Input_path, country, wave, "cons_agg_wave1_visit2.dta"))
+  csption1 <- read_dta_auto("cons_agg_wave1_visit1", input_dir, temp_dir)
+  csption2 <- read_dta_auto("cons_agg_wave1_visit2", input_dir, temp_dir)
   
   weights <- csption1 |>
     dplyr::left_join(csption2, by = "hhid") |>
@@ -260,11 +321,11 @@ tryCatch({
   cat("  ✗ Error in weights: ", e$message, "\n")
 })
 
-# 3.6 Planting month
+# 4.6 Planting month
 tryCatch({
   cat("  Extracting planting month...\n")
   
-  plot_inputs <- haven::read_dta(file.path(Input_path, country, wave, "sect11f_plantingw1.dta"))
+  plot_inputs <- read_dta_auto("sect11f_plantingw1", input_dir, temp_dir)
   
   planting_month <- plot_inputs |>
     dplyr::mutate(
@@ -286,11 +347,11 @@ tryCatch({
   cat("  ✗ Error in planting month: ", e$message, "\n")
 })
 
-# 3.7 Harvest interview month
+# 4.7 Harvest interview month
 tryCatch({
   cat("  Extracting harvest interview month...\n")
   
-  cover2 <- haven::read_dta(file.path(Input_path, country, wave, "secta_harvestw1.dta"))
+  cover2 <- read_dta_auto("secta_harvestw1", input_dir, temp_dir)
   
   harvest_interview_month <- cover2 |>
     dplyr::mutate(
@@ -308,11 +369,11 @@ tryCatch({
   cat("  ✗ Error in harvest interview month: ", e$message, "\n")
 })
 
-# 3.8 Planting interview month
+# 4.8 Planting interview month
 tryCatch({
   cat("  Extracting planting interview month...\n")
   
-  cover <- haven::read_dta(file.path(Input_path, country, wave, "secta_plantingw1.dta"))
+  cover <- read_dta_auto("secta_plantingw1", input_dir, temp_dir)
   
   planting_interview_month <- cover |>
     dplyr::mutate(
@@ -331,16 +392,16 @@ tryCatch({
 })
 
 # ==============================================================================
-# 4. HARVEST QUANTITY AND CONVERSION FACTORS
+# 5. HARVEST QUANTITY AND CONVERSION FACTORS
 # ==============================================================================
 
 cat("\n=== Processing harvest data ===\n")
 
-# 4.1 Conversion factors
+# 5.1 Conversion factors
 tryCatch({
   cat("  Calculating conversion factors...\n")
   
-  conversions <- haven::read_dta(file.path(Input_path, country, wave, "w1agnsconversion.dta"))
+  conversions <- read_dta_auto("w1agnsconversion", input_dir, temp_dir)
   
   # Clean conversion factors
   conversions <- conversions |>
@@ -364,7 +425,7 @@ tryCatch({
   cat("  ✗ Error in conversion factors: ", e$message, "\n")
 })
 
-# 4.2 Harvest kg
+# 5.2 Harvest kg
 tryCatch({
   cat("  Calculating harvest kg...\n")
   
@@ -372,7 +433,7 @@ tryCatch({
   conversions <- haven::read_dta(file.path(temp_dir, "Conversion_factors.dta"))
   
   # Load harvest data
-  harvest <- haven::read_dta(file.path(Input_path, country, wave, "secta3_harvestw1.dta"))
+  harvest <- read_dta_auto("secta3_harvestw1", input_dir, temp_dir)
   
   # Add admin levels
   admin1 <- haven::read_dta(file.path(temp_dir, "admin1.dta"))
@@ -417,11 +478,11 @@ tryCatch({
   cat("  ✗ Error in harvest kg: ", e$message, "\n")
 })
 
-# 4.3 Crop shocks
+# 5.3 Crop shocks
 tryCatch({
   cat("  Extracting crop shocks...\n")
   
-  harvest <- haven::read_dta(file.path(Input_path, country, wave, "secta3_harvestw1.dta"))
+  harvest <- read_dta_auto("secta3_harvestw1", input_dir, temp_dir)
   
   crop_shock <- harvest |>
     dplyr::mutate(
@@ -464,18 +525,18 @@ tryCatch({
   cat("  ✗ Error in crop shocks: ", e$message, "\n")
 })
 
-# 4.4 Harvest sold amount
+# 5.4 Harvest sold amount
 tryCatch({
   cat("  Calculating harvest sold amount...\n")
   
   # Load conversion factors for sold harvest
-  conversions_kg <- haven::read_dta(file.path(Input_path, country, wave, "w1agnsconversion.dta")) |>
+  conversions_kg <- read_dta_auto("w1agnsconversion", input_dir, temp_dir) |>
     dplyr::filter(nscode <= 83) |>
     dplyr::rename(cropcode = agcropid) |>
     dplyr::select(cropcode, nscode, conversion)
   
   # Load harvest data
-  harvest <- haven::read_dta(file.path(Input_path, country, wave, "secta3_harvestw1.dta"))
+  harvest <- read_dta_auto("secta3_harvestw1", input_dir, temp_dir)
   
   # Add admin levels
   admin1 <- haven::read_dta(file.path(temp_dir, "admin1.dta"))
@@ -563,11 +624,11 @@ tryCatch({
   cat("  ✗ Error in harvest sold amount: ", e$message, "\n")
 })
 
-# 4.5 Harvest sold value
+# 5.5 Harvest sold value
 tryCatch({
   cat("  Calculating harvest sold value...\n")
   
-  harvest <- haven::read_dta(file.path(Input_path, country, wave, "secta3_harvestw1.dta"))
+  harvest <- read_dta_auto("secta3_harvestw1", input_dir, temp_dir)
   
   # Add admin levels
   admin1 <- haven::read_dta(file.path(temp_dir, "admin1.dta"))
@@ -604,17 +665,17 @@ tryCatch({
 })
 
 # ==============================================================================
-# 5. HARVEST VALUE AND MAIN CROP
+# 6. HARVEST VALUE AND MAIN CROP
 # ==============================================================================
 
 cat("\n=== Calculating harvest values ===\n")
 
-# 5.1 Harvest value
+# 6.1 Harvest value
 tryCatch({
   cat("  Calculating harvest value...\n")
   
   # Load harvest data
-  harvest <- haven::read_dta(file.path(Input_path, country, wave, "secta3_harvestw1.dta"))
+  harvest <- read_dta_auto("secta3_harvestw1", input_dir, temp_dir)
   
   harvest_data <- harvest |>
     dplyr::mutate(
@@ -650,11 +711,11 @@ tryCatch({
   cat("  ✗ Error in harvest value: ", e$message, "\n")
 })
 
-# 5.2 Intercropped
+# 6.2 Intercropped
 tryCatch({
   cat("  Extracting intercropped status...\n")
   
-  plot_inputs <- haven::read_dta(file.path(Input_path, country, wave, "sect11f_plantingw1.dta"))
+  plot_inputs <- read_dta_auto("sect11f_plantingw1", input_dir, temp_dir)
   
   intercropped <- plot_inputs |>
     dplyr::mutate(
@@ -678,11 +739,11 @@ tryCatch({
   cat("  ✗ Error in intercropped: ", e$message, "\n")
 })
 
-# 5.3 Number of seasonal crops
+# 6.3 Number of seasonal crops
 tryCatch({
   cat("  Calculating number of seasonal crops...\n")
   
-  harvest <- haven::read_dta(file.path(Input_path, country, wave, "secta3_harvestw1.dta"))
+  harvest <- read_dta_auto("secta3_harvestw1", input_dir, temp_dir)
   
   nb_seasonal_crop <- harvest |>
     dplyr::mutate(
@@ -701,12 +762,12 @@ tryCatch({
   cat("  ✗ Error in nb_seasonal_crop: ", e$message, "\n")
 })
 
-# 5.4 Main crop shares - Identify perennial crops
+# 6.4 Main crop shares - Identify perennial crops
 tryCatch({
   cat("  Identifying perennial crops...\n")
   
   # Load perennial data
-  perennial <- haven::read_dta(file.path(Input_path, country, wave, "sect11g_plantingw1.dta"))
+  perennial <- read_dta_auto("sect11g_plantingw1", input_dir, temp_dir)
   
   # Get list of perennial crop codes
   perennial_crops <- perennial |>
@@ -715,7 +776,7 @@ tryCatch({
     dplyr::summarise(count_permanent = sum(count_permanent), .groups = "drop")
   
   # Get temporary crops
-  plot_inputs <- haven::read_dta(file.path(Input_path, country, wave, "sect11f_plantingw1.dta"))
+  plot_inputs <- read_dta_auto("sect11f_plantingw1", input_dir, temp_dir)
   
   temp_crops <- plot_inputs |>
     dplyr::mutate(count_temporary = 1) |>
@@ -753,7 +814,7 @@ tryCatch({
   cat("  ✗ Error in perennial crops: ", e$message, "\n")
 })
 
-# 5.5 Main crop shares - full calculation
+# 6.5 Main crop shares - full calculation
 tryCatch({
   cat("  Calculating main crop shares...\n")
   
@@ -761,7 +822,7 @@ tryCatch({
   harvest_value <- haven::read_dta(file.path(temp_dir, "harvest_value.dta"))
   
   # Load harvest data
-  harvest <- haven::read_dta(file.path(Input_path, country, wave, "secta3_harvestw1.dta"))
+  harvest <- read_dta_auto("secta3_harvestw1", input_dir, temp_dir)
   
   # Load perennial crop list
   perennial_crops <- haven::read_dta(file.path(temp_dir, "Perennial_crops_list.dta"))
@@ -872,7 +933,7 @@ tryCatch({
 })
 
 # ==============================================================================
-# 6. LAND AREA
+# 7. LAND AREA
 # ==============================================================================
 
 cat("\n=== Processing land area ===\n")
@@ -880,7 +941,7 @@ cat("\n=== Processing land area ===\n")
 tryCatch({
   cat("  Calculating plot area...\n")
   
-  plot_roster <- haven::read_dta(file.path(Input_path, country, wave, "sect11a1_plantingw1.dta"))
+  plot_roster <- read_dta_auto("sect11a1_plantingw1", input_dir, temp_dir)
   
   # Load admin3 for imputation
   admin3 <- haven::read_dta(file.path(temp_dir, "admin3.dta"))
@@ -963,12 +1024,12 @@ tryCatch({
 })
 
 # ==============================================================================
-# 7. SEED VARIABLES
+# 8. SEED VARIABLES
 # ==============================================================================
 
 cat("\n=== Processing seed variables ===\n")
 
-# 7.1 Seed kg
+# 8.1 Seed kg
 tryCatch({
   cat("  Calculating seed kg...\n")
   
@@ -976,7 +1037,7 @@ tryCatch({
   conversions <- haven::read_dta(file.path(temp_dir, "Conversion_factors.dta"))
   
   # Load seed data
-  seeds <- haven::read_dta(file.path(Input_path, country, wave, "sect11e_plantingw1.dta"))
+  seeds <- read_dta_auto("sect11e_plantingw1", input_dir, temp_dir)
   
   # Add admin levels
   admin1 <- haven::read_dta(file.path(temp_dir, "admin1.dta"))
@@ -1029,11 +1090,11 @@ tryCatch({
   cat("  ✗ Error in seed kg: ", e$message, "\n")
 })
 
-# 7.2 Seed kg sold (purchased)
+# 8.2 Seed kg sold (purchased)
 tryCatch({
   cat("  Calculating purchased seed kg...\n")
   
-  seeds <- haven::read_dta(file.path(Input_path, country, wave, "sect11e_plantingw1.dta"))
+  seeds <- read_dta_auto("sect11e_plantingw1", input_dir, temp_dir)
   
   seeds_amount_purchased_kg <- seeds |>
     dplyr::mutate(
@@ -1070,11 +1131,11 @@ tryCatch({
   cat("  ✗ Error in purchased seed kg: ", e$message, "\n")
 })
 
-# 7.3 Seed value
+# 8.3 Seed value
 tryCatch({
   cat("  Calculating seed value...\n")
   
-  seeds <- haven::read_dta(file.path(Input_path, country, wave, "sect11e_plantingw1.dta"))
+  seeds <- read_dta_auto("sect11e_plantingw1", input_dir, temp_dir)
   
   seed_value_temp <- seeds |>
     dplyr::mutate(
@@ -1113,7 +1174,7 @@ tryCatch({
 })
 
 # ==============================================================================
-# 8. LABOR DAYS
+# 9. LABOR DAYS
 # ==============================================================================
 
 cat("\n=== Processing labor data ===\n")
@@ -1122,7 +1183,7 @@ tryCatch({
   cat("  Processing labor days (skeleton - complex)...\n")
   
   # Load labor data
-  labor <- haven::read_dta(file.path(Input_path, country, wave, "secta2_harvestw1.dta"))
+  labor <- read_dta_auto("secta2_harvestw1", input_dir, temp_dir)
   
   # This is a placeholder - full labor processing would be extensive
   
@@ -1151,16 +1212,16 @@ tryCatch({
 })
 
 # ==============================================================================
-# 9. FERTILIZER VARIABLES
+# 10. FERTILIZER VARIABLES
 # ==============================================================================
 
 cat("\n=== Processing fertilizer variables ===\n")
 
-# 9.1 Inorganic fertilizer
+# 10.1 Inorganic fertilizer
 tryCatch({
   cat("  Extracting inorganic fertilizer use...\n")
   
-  ferts <- haven::read_dta(file.path(Input_path, country, wave, "sect11d_plantingw1.dta"))
+  ferts <- read_dta_auto("sect11d_plantingw1", input_dir, temp_dir)
   
   inorganic_fertilizer <- ferts |>
     dplyr::mutate(
@@ -1188,11 +1249,11 @@ tryCatch({
   cat("  ✗ Error in inorganic fertilizer: ", e$message, "\n")
 })
 
-# 9.2 Nitrogen equivalent
+# 10.2 Nitrogen equivalent
 tryCatch({
   cat("  Calculating nitrogen equivalent...\n")
   
-  ferts <- haven::read_dta(file.path(Input_path, country, wave, "sect11d_plantingw1.dta"))
+  ferts <- read_dta_auto("sect11d_plantingw1", input_dir, temp_dir)
   
   nitrogen_kg <- ferts |>
     dplyr::mutate(
@@ -1263,11 +1324,11 @@ tryCatch({
   cat("  ✗ Error in nitrogen equivalent: ", e$message, "\n")
 })
 
-# 9.3 Inorganic fertilizer value
+# 10.3 Inorganic fertilizer value
 tryCatch({
   cat("  Calculating inorganic fertilizer value...\n")
   
-  ferts <- haven::read_dta(file.path(Input_path, country, wave, "sect11d_plantingw1.dta"))
+  ferts <- read_dta_auto("sect11d_plantingw1", input_dir, temp_dir)
   
   # Extract fertilizer purchases
   fert_purch <- ferts |>
@@ -1328,11 +1389,11 @@ tryCatch({
   cat("  ✗ Error in fertilizer value: ", e$message, "\n")
 })
 
-# 9.4 Organic fertilizer
+# 10.4 Organic fertilizer
 tryCatch({
   cat("  Extracting organic fertilizer use...\n")
   
-  ferts <- haven::read_dta(file.path(Input_path, country, wave, "sect11d_plantingw1.dta"))
+  ferts <- read_dta_auto("sect11d_plantingw1", input_dir, temp_dir)
   
   organic_fertilizer <- ferts |>
     dplyr::mutate(
@@ -1359,11 +1420,11 @@ tryCatch({
   cat("  ✗ Error in organic fertilizer: ", e$message, "\n")
 })
 
-# 9.5 Pesticides
+# 10.5 Pesticides
 tryCatch({
   cat("  Extracting pesticide use...\n")
   
-  pesticides <- haven::read_dta(file.path(Input_path, country, wave, "sect11c_plantingw1.dta"))
+  pesticides <- read_dta_auto("sect11c_plantingw1", input_dir, temp_dir)
   
   used_pesticides <- pesticides |>
     dplyr::mutate(
@@ -1389,16 +1450,16 @@ tryCatch({
 })
 
 # ==============================================================================
-# 10. PLOT-LEVEL VARIABLES
+# 11. PLOT-LEVEL VARIABLES
 # ==============================================================================
 
 cat("\n=== Processing plot-level variables ===\n")
 
-# 10.1 Plot ownership
+# 11.1 Plot ownership
 tryCatch({
   cat("  Extracting plot ownership...\n")
   
-  tenure <- haven::read_dta(file.path(Input_path, country, wave, "sect11b_plantingw1.dta"))
+  tenure <- read_dta_auto("sect11b_plantingw1", input_dir, temp_dir)
   
   plot_owned <- tenure |>
     dplyr::mutate(
@@ -1416,11 +1477,11 @@ tryCatch({
   cat("  ✗ Error in plot ownership: ", e$message, "\n")
 })
 
-# 10.2 Irrigated
+# 11.2 Irrigated
 tryCatch({
   cat("  Extracting irrigation status...\n")
   
-  tenure <- haven::read_dta(file.path(Input_path, country, wave, "sect11b_plantingw1.dta"))
+  tenure <- read_dta_auto("sect11b_plantingw1", input_dir, temp_dir)
   
   irrigated <- tenure |>
     dplyr::mutate(
@@ -1439,11 +1500,11 @@ tryCatch({
   cat("  ✗ Error in irrigation: ", e$message, "\n")
 })
 
-# 10.3 Tractor
+# 11.3 Tractor
 tryCatch({
   cat("  Extracting tractor use...\n")
   
-  pesticides <- haven::read_dta(file.path(Input_path, country, wave, "sect11c_plantingw1.dta"))
+  pesticides <- read_dta_auto("sect11c_plantingw1", input_dir, temp_dir)
   
   tractor <- pesticides |>
     dplyr::mutate(
@@ -1471,11 +1532,11 @@ tryCatch({
   cat("  ✗ Error in tractor: ", e$message, "\n")
 })
 
-# 10.4 Number of fallow plots
+# 11.4 Number of fallow plots
 tryCatch({
   cat("  Calculating number of fallow plots...\n")
   
-  tenure <- haven::read_dta(file.path(Input_path, country, wave, "sect11b_plantingw1.dta"))
+  tenure <- read_dta_auto("sect11b_plantingw1", input_dir, temp_dir)
   
   nb_fallow_plots <- tenure |>
     dplyr::mutate(
@@ -1495,11 +1556,11 @@ tryCatch({
   cat("  ✗ Error in fallow plots: ", e$message, "\n")
 })
 
-# 10.5 Number of plots
+# 11.5 Number of plots
 tryCatch({
   cat("  Calculating number of plots...\n")
   
-  tenure <- haven::read_dta(file.path(Input_path, country, wave, "sect11b_plantingw1.dta"))
+  tenure <- read_dta_auto("sect11b_plantingw1", input_dir, temp_dir)
   
   nb_plots <- tenure |>
     dplyr::mutate(
@@ -1520,17 +1581,17 @@ tryCatch({
 })
 
 # ==============================================================================
-# 11. HOUSEHOLD-LEVEL VARIABLES
+# 12. HOUSEHOLD-LEVEL VARIABLES
 # ==============================================================================
 
 cat("\n=== Processing household-level variables ===\n")
 
-# 11.1 Household education
+# 12.1 Household education
 tryCatch({
   cat("  Extracting household education...\n")
   
-  indiv1 <- haven::read_dta(file.path(Input_path, country, wave, "sect2a_harvestw1.dta"))
-  indiv2 <- haven::read_dta(file.path(Input_path, country, wave, "sect2b_harvestw1.dta"))
+  indiv1 <- read_dta_auto("sect2a_harvestw1", input_dir, temp_dir)
+  indiv2 <- read_dta_auto("sect2b_harvestw1", input_dir, temp_dir)
   
   education <- indiv1 |>
     dplyr::left_join(indiv2, by = c("hhid", "indiv")) |>
@@ -1571,11 +1632,11 @@ tryCatch({
   cat("  ✗ Error in household education: ", e$message, "\n")
 })
 
-# 11.2 Electricity access
+# 12.2 Electricity access
 tryCatch({
   cat("  Extracting electricity access...\n")
   
-  housing <- haven::read_dta(file.path(Input_path, country, wave, "sect8_harvestw1.dta"))
+  housing <- read_dta_auto("sect8_harvestw1", input_dir, temp_dir)
   
   electricity <- housing |>
     dplyr::mutate(
@@ -1592,11 +1653,11 @@ tryCatch({
   cat("  ✗ Error in electricity access: ", e$message, "\n")
 })
 
-# 11.3 Dependency ratio
+# 12.3 Dependency ratio
 tryCatch({
   cat("  Calculating dependency ratio...\n")
   
-  indiv <- haven::read_dta(file.path(Input_path, country, wave, "sect1_plantingw1.dta"))
+  indiv <- read_dta_auto("sect1_plantingw1", input_dir, temp_dir)
   
   dependency <- indiv |>
     dplyr::filter(s1q7 == 1) |>
@@ -1625,11 +1686,11 @@ tryCatch({
   cat("  ✗ Error in dependency ratio: ", e$message, "\n")
 })
 
-# 11.4 Livestock
+# 12.4 Livestock
 tryCatch({
   cat("  Extracting livestock ownership...\n")
   
-  livestock <- haven::read_dta(file.path(Input_path, country, wave, "sect11i_plantingw1.dta"))
+  livestock <- read_dta_auto("sect11i_plantingw1", input_dir, temp_dir)
   
   livestock_out <- livestock |>
     dplyr::mutate(
@@ -1652,12 +1713,12 @@ tryCatch({
   cat("  ✗ Error in livestock: ", e$message, "\n")
 })
 
-# 11.5 Consumption quintile and aggregate
+# 12.5 Consumption quintile and aggregate
 tryCatch({
   cat("  Extracting consumption variables...\n")
   
-  csption1 <- haven::read_dta(file.path(Input_path, country, wave, "cons_agg_wave1_visit1.dta"))
-  csption2 <- haven::read_dta(file.path(Input_path, country, wave, "cons_agg_wave1_visit2.dta"))
+  csption1 <- read_dta_auto("cons_agg_wave1_visit1", input_dir, temp_dir)
+  csption2 <- read_dta_auto("cons_agg_wave1_visit2", input_dir, temp_dir)
   
   consumption <- csption1 |>
     dplyr::left_join(csption2, by = "hhid") |>
@@ -1684,11 +1745,11 @@ tryCatch({
   cat("  ✗ Error in consumption variables: ", e$message, "\n")
 })
 
-# 11.6 Household shock
+# 12.6 Household shock
 tryCatch({
   cat("  Extracting household shocks...\n")
   
-  shocks <- haven::read_dta(file.path(Input_path, country, wave, "sect15a_harvestw1.dta"))
+  shocks <- read_dta_auto("sect15a_harvestw1", input_dir, temp_dir)
   
   hh_shock <- shocks |>
     dplyr::mutate(
@@ -1714,11 +1775,11 @@ tryCatch({
   cat("  ✗ Error in household shocks: ", e$message, "\n")
 })
 
-# 11.7 Household size
+# 12.7 Household size
 tryCatch({
   cat("  Extracting household size...\n")
   
-  labor <- haven::read_dta(file.path(Input_path, country, wave, "sect3_plantingw1.dta"))
+  labor <- read_dta_auto("sect3_plantingw1", input_dir, temp_dir)
   
   hh_size <- labor |>
     dplyr::group_by(hhid) |>
@@ -1735,7 +1796,7 @@ tryCatch({
 })
 
 # ==============================================================================
-# 12. ASSET INDICES
+# 13. ASSET INDICES
 # ==============================================================================
 
 cat("\n=== Calculating asset indices ===\n")
@@ -1744,7 +1805,7 @@ tryCatch({
   cat("  Calculating asset indices...\n")
   
   # Agricultural assets
-  items <- haven::read_dta(file.path(Input_path, country, wave, "secta41_harvestw1.dta"))
+  items <- read_dta_auto("secta41_harvestw1", input_dir, temp_dir)
   
   ag_assets <- items |>
     dplyr::filter(!item_cd %in% c(313, 314, 315, 316, 317, 321)) |>
@@ -1772,7 +1833,7 @@ tryCatch({
   haven::write_dta(ag_asset_index, file.path(temp_dir, "ag_asset_index.dta"))
   
   # Household assets
-  hh_items <- haven::read_dta(file.path(Input_path, country, wave, "sect7_harvestw1.dta"))
+  hh_items <- read_dta_auto("sect7_harvestw1", input_dir, temp_dir)
   
   hh_assets <- hh_items |>
     dplyr::filter(item_cd <= 331) |>
@@ -1804,11 +1865,11 @@ tryCatch({
   cat("  ✗ Error in asset indices: ", e$message, "\n")
 })
 
-# 12.2 Non-farm enterprise
+# 13.2 Non-farm enterprise
 tryCatch({
   cat("  Extracting non-farm enterprise...\n")
   
-  nfe <- haven::read_dta(file.path(Input_path, country, wave, "sect9_harvestw1.dta"))
+  nfe <- read_dta_auto("sect9_harvestw1", input_dir, temp_dir)
   
   nfe_out <- nfe |>
     dplyr::mutate(
@@ -1827,16 +1888,16 @@ tryCatch({
 })
 
 # ==============================================================================
-# 13. INDIVIDUAL-LEVEL VARIABLES
+# 14. INDIVIDUAL-LEVEL VARIABLES
 # ==============================================================================
 
 cat("\n=== Processing individual-level variables ===\n")
 
-# 13.1 Individual characteristics
+# 14.1 Individual characteristics
 tryCatch({
   cat("  Extracting individual characteristics...\n")
   
-  indiv <- haven::read_dta(file.path(Input_path, country, wave, "sect1_plantingw1.dta"))
+  indiv <- read_dta_auto("sect1_plantingw1", input_dir, temp_dir)
   
   indiv_chars <- indiv |>
     dplyr::mutate(
@@ -1882,12 +1943,12 @@ tryCatch({
   cat("  ✗ Error in individual characteristics: ", e$message, "\n")
 })
 
-# 13.2 Wasting
+# 14.2 Wasting
 tryCatch({
   cat("  Processing wasting (anthropometric data)...\n")
   
   # Load anthropometric data
-  anthropo <- haven::read_dta(file.path(Input_path, country, wave, "sect4a_harvestw1.dta"))
+  anthropo <- read_dta_auto("sect4a_harvestw1", input_dir, temp_dir)
   
   # Load individual characteristics
   indiv_chars <- haven::read_dta(file.path(temp_dir, "indiv_chars.dta"))
@@ -1929,11 +1990,11 @@ tryCatch({
   cat("  ✗ Error in wasting: ", e$message, "\n")
 })
 
-# 13.3 Labor
+# 14.3 Labor
 tryCatch({
   cat("  Extracting labor variables...\n")
   
-  labor <- haven::read_dta(file.path(Input_path, country, wave, "sect3_plantingw1.dta"))
+  labor <- read_dta_auto("sect3_plantingw1", input_dir, temp_dir)
   
   labor_out <- labor |>
     dplyr::mutate(
@@ -1998,12 +2059,12 @@ tryCatch({
   cat("  ✗ Error in labor variables: ", e$message, "\n")
 })
 
-# 13.4 Education (individual)
+# 14.4 Education (individual)
 tryCatch({
   cat("  Extracting individual education...\n")
   
-  indiv1 <- haven::read_dta(file.path(Input_path, country, wave, "sect2a_harvestw1.dta"))
-  indiv2 <- haven::read_dta(file.path(Input_path, country, wave, "sect2b_harvestw1.dta"))
+  indiv1 <- read_dta_auto("sect2a_harvestw1", input_dir, temp_dir)
+  indiv2 <- read_dta_auto("sect2b_harvestw1", input_dir, temp_dir)
   
   education <- indiv1 |>
     dplyr::left_join(indiv2, by = c("hhid", "indiv")) |>
@@ -2036,7 +2097,7 @@ tryCatch({
 })
 
 # ==============================================================================
-# 14. HDDS (Household Dietary Diversity Score)
+# 15. HDDS (Household Dietary Diversity Score)
 # ==============================================================================
 
 cat("\n=== Processing HDDS ===\n")
@@ -2044,7 +2105,7 @@ cat("\n=== Processing HDDS ===\n")
 tryCatch({
   cat("  Calculating HDDS...\n")
   
-  hdds <- haven::read_dta(file.path(Input_path, country, wave, "sect10b_harvestw1.dta"))
+  hdds <- read_dta_auto("sect10b_harvestw1", input_dir, temp_dir)
   
   hdds_out <- hdds |>
     dplyr::filter(s10bq1 == 1) |>  # Keep if consumed
@@ -2083,7 +2144,7 @@ tryCatch({
 })
 
 # ==============================================================================
-# 15. GEOGRAPHIC VARIABLES
+# 16. GEOGRAPHIC VARIABLES
 # ==============================================================================
 
 cat("\n=== Processing geographic variables ===\n")
@@ -2092,7 +2153,7 @@ tryCatch({
   cat("  Extracting geographic variables...\n")
   
   # Load geovars
-  geovars <- haven::read_dta(file.path(Input_path, country, wave, "NGA_HouseholdGeovars_Y1.dta"))
+  geovars <- read_dta_auto("NGA_HouseholdGeovars_Y1", input_dir, temp_dir)
   
   # Coordinates
   coords <- geovars |>
@@ -2134,7 +2195,7 @@ tryCatch({
   haven::write_dta(dist_market, file.path(temp_dir, "dist_market.dta"))
   
   # Plot slope
-  plot_geovars <- haven::read_dta(file.path(Input_path, country, wave, "NGA_PlotGeovariables_Y1.dta"))
+  plot_geovars <- read_dta_auto("NGA_PlotGeovariables_Y1", input_dir, temp_dir)
   
   plot_slope <- plot_geovars |>
     dplyr::mutate(
@@ -2195,7 +2256,51 @@ tryCatch({
 })
 
 # ==============================================================================
-# 16. FINAL OUTPUT
+# 17. CLEAN UP: REMOVE EXTRACTED FILES (KEEP ONLY ZIP)
+# ==============================================================================
+
+cat("\n=== Cleaning up extracted files ===\n")
+
+# Get all files in the input directory
+all_files <- list.files(input_dir, full.names = TRUE)
+
+# Keep only zip files (case insensitive)
+zip_pattern <- "\\.zip$"
+del_files <- all_files[!grepl(zip_pattern, all_files, ignore.case = TRUE)]
+
+if (length(del_files) > 0) {
+  cat("  Removing extracted files:\n")
+  for (f in del_files) {
+    cat("    -", basename(f), "\n")
+    unlink(f, recursive = TRUE, force = TRUE)
+  }
+  cat("  ✓ Cleanup complete\n")
+} else {
+  cat("  No extracted files to remove\n")
+}
+
+# ==============================================================================
+# 18. CLEAN TEMP DIRECTORY
+# ==============================================================================
+
+cat("\n=== Cleaning temporary directory ===\n")
+
+# Remove all files in temp_dir but keep the directory structure
+temp_files <- list.files(temp_dir, full.names = TRUE, recursive = TRUE)
+
+if (length(temp_files) > 0) {
+  cat("  Removing temporary files:\n")
+  for (f in temp_files) {
+    cat("    -", basename(f), "\n")
+    unlink(f, recursive = TRUE, force = TRUE)
+  }
+  cat("  ✓ Temp directory cleaned\n")
+} else {
+  cat("  No temporary files to remove\n")
+}
+
+# ==============================================================================
+# 19. FINAL OUTPUT
 # ==============================================================================
 
 cat("\n=== NGA_GHS1 processing complete ===\n")
