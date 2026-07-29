@@ -18,7 +18,7 @@ lapply(packages, library, character.only = TRUE)
 # ==============================================================================
 
 # Define paths
-project_root <- getwd()
+project_root <- '../..'
 Input_path <- file.path(project_root, "R_data", "Input")
 Temp_path <- file.path(project_root, "R_data", "Temp")
 Final_path <- file.path(project_root, "R_data", "Final")

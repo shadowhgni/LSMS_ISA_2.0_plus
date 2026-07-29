@@ -20,7 +20,7 @@ source("../programs.r")
 # ==============================================================================
 
 # Define paths (adjust as needed)
-project_root <- getwd()
+project_root <- '../..'
 Do_path <- file.path(project_root, "R_scripts")
 Input_path <- file.path(project_root, "R_data", "Input")
 Temp_path <- file.path(project_root, "R_data", "Temp")
