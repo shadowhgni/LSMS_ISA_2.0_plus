@@ -1,5 +1,5 @@
 # ==============================================================================
-# NGA_GHS2.R - Nigeria Wave 2 (GHS 2012)
+# NGA_GHS2.r - Nigeria Wave 2 (GHS 2012)
 # LSMS-ISA Harmonised Panel Analysis Code - R Translation
 # ==============================================================================
 
@@ -14,7 +14,7 @@ if (any(!installed)) utils::install.packages(packages[!installed])
 lapply(packages, library, character.only = TRUE)
 
 # Source helper functions
-source("R_scripts/programs.R")
+source("R_scripts/programs.r")
 
 # ==============================================================================
 # 1. SET UP PATHS AND GLOBALS
@@ -74,7 +74,7 @@ temppath <- file.path("NGA", "GHS12")
 # 2. HELPER FUNCTIONS
 # ==============================================================================
 
-# Note: The following helper functions would need to be defined in programs.R
+# Note: The following helper functions would need to be defined in programs.r
 # For this translation, we'll define them inline or note where they're needed
 
 # ==============================================================================

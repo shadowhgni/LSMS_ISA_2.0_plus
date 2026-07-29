@@ -65,7 +65,7 @@ invisible(lapply(required_packages, install_if_missing))
 
 # Source the R equivalent of programs.do
 # This file should contain helper functions that match the Stata ado files
-source(file.path(Do_path, "programs.R"))
+source(file.path(Do_path, "programs.r"))
 
 # ==============================================================================
 # 4. RUN ALL COUNTRY-SPECIFIC CLEANING SCRIPTS
@@ -88,76 +88,76 @@ source_script <- function(file_name) {
 }
 
 # Source the programs file first
-if (file.exists(file.path(Do_path, "programs.R"))) {
-  source(file.path(Do_path, "programs.R"))
+if (file.exists(file.path(Do_path, "programs.r"))) {
+  source(file.path(Do_path, "programs.r"))
 } else {
-  cat("Warning: programs.R not found. Some functions may be missing.\n")
+  cat("Warning: programs.r not found. Some functions may be missing.\n")
 }
 
 # Ethiopia
-source_script("ETH_ESS1.R")
-source_script("ETH_ESS2.R")
-source_script("ETH_ESS3.R")
-source_script("ETH_ESS4.R")
-source_script("ETH_ESS5.R")
-source_script("Append_ETH.R")
+source_script("ETH_ESS1.r")
+source_script("ETH_ESS2.r")
+source_script("ETH_ESS3.r")
+source_script("ETH_ESS4.r")
+source_script("ETH_ESS5.r")
+source_script("Append_ETH.r")
 
 # Malawi
-source_script("MWI_IHPS1.R")
-source_script("MWI_IHPS2.R")
-source_script("MWI_IHPS3.R")
-source_script("MWI_IHPS4.R")
-source_script("Append_MWI.R")
+source_script("MWI_IHPS1.r")
+source_script("MWI_IHPS2.r")
+source_script("MWI_IHPS3.r")
+source_script("MWI_IHPS4.r")
+source_script("Append_MWI.r")
 
 # Mali
-source_script("MLI_EACI1.R")
-source_script("MLI_EACI2.R")
-source_script("Append_MLI.R")
+source_script("MLI_EACI1.r")
+source_script("MLI_EACI2.r")
+source_script("Append_MLI.r")
 
 # Niger
-source_script("NER_ECVMA1.R")
-source_script("NER_ECVMA2.R")
-source_script("Append_NER.R")
+source_script("NER_ECVMA1.r")
+source_script("NER_ECVMA2.r")
+source_script("Append_NER.r")
 
 # Nigeria
-source_script("NGA_GHS1.R")
-source_script("NGA_GHS2.R")
-source_script("NGA_GHS3.R")
-source_script("NGA_GHS4.R")
-source_script("NGA_GHS5.R")
-source_script("Append_NGA.R")
+source_script("NGA_GHS1.r")
+source_script("NGA_GHS2.r")
+source_script("NGA_GHS3.r")
+source_script("NGA_GHS4.r")
+source_script("NGA_GHS5.r")
+source_script("Append_NGA.r")
 
 # Tanzania
-source_script("TZA_NPS1.R")
-source_script("TZA_NPS2.R")
-source_script("TZA_NPS3.R")
-source_script("TZA_NPS4.R")
-source_script("TZA_NPS4_refresh.R")
-source_script("TZA_NPS5.R")
-source_script("TZA_NPS5_refresh.R")
-source_script("Append_TZA.R")
+source_script("TZA_NPS1.r")
+source_script("TZA_NPS2.r")
+source_script("TZA_NPS3.r")
+source_script("TZA_NPS4.r")
+source_script("TZA_NPS4_refresh.r")
+source_script("TZA_NPS5.r")
+source_script("TZA_NPS5_refresh.r")
+source_script("Append_TZA.r")
 
 # Uganda - Regular waves
-source_script("UGA_UNPS1.R")
-source_script("UGA_UNPS2.R")
-source_script("UGA_UNPS3.R")
-source_script("UGA_UNPS4.R")
-source_script("UGA_UNPS5.R")
-source_script("UGA_UNPS7.R")
-source_script("UGA_UNPS8.R")
+source_script("UGA_UNPS1.r")
+source_script("UGA_UNPS2.r")
+source_script("UGA_UNPS3.r")
+source_script("UGA_UNPS4.r")
+source_script("UGA_UNPS5.r")
+source_script("UGA_UNPS7.r")
+source_script("UGA_UNPS8.r")
 
 # Uganda - Season 2 waves
-source_script("UGA_UNPS1_S2.R")
-source_script("UGA_UNPS2_S2.R")
-source_script("UGA_UNPS3_S2.R")
-source_script("UGA_UNPS4_S2.R")
-source_script("UGA_UNPS5_S2.R")
-source_script("UGA_UNPS7_S2.R")
-source_script("UGA_UNPS8_S2.R")
-source_script("Append_UGA.R")
+source_script("UGA_UNPS1_S2.r")
+source_script("UGA_UNPS2_S2.r")
+source_script("UGA_UNPS3_S2.r")
+source_script("UGA_UNPS4_S2.r")
+source_script("UGA_UNPS5_S2.r")
+source_script("UGA_UNPS7_S2.r")
+source_script("UGA_UNPS8_S2.r")
+source_script("Append_UGA.r")
 
 # Final append - all countries combined
-source_script("Append_ALL.R")
+source_script("Append_ALL.r")
 
 # ==============================================================================
 # 5. FINAL MESSAGE

@@ -1,5 +1,5 @@
 # ==============================================================================
-# NER_ECVMA2.R - Niger Wave 2 (ECVMA 2014)
+# NER_ECVMA2.r - Niger Wave 2 (ECVMA 2014)
 # LSMS-ISA Harmonised Panel Analysis Code - R Translation
 # ==============================================================================
 
@@ -13,7 +13,7 @@ if (any(!installed)) utils::install.packages(packages[!installed])
 lapply(packages, library, character.only = TRUE)
 
 # Source helper functions
-source("R_scripts/programs.R")
+source("R_scripts/programs.r")
 
 # ==============================================================================
 # 1. SET UP PATHS AND GLOBALS

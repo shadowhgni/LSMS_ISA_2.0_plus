@@ -1,5 +1,5 @@
 # ==============================================================================
-# NGA_GHS3.R - Nigeria Wave 3 (GHS 2015)
+# NGA_GHS3.r - Nigeria Wave 3 (GHS 2015)
 # LSMS-ISA Harmonised Panel Analysis Code - R Translation
 # ==============================================================================
 
@@ -1570,7 +1570,7 @@ haven::write_dta(indiv_final, file.path(Final_path, "NGA_GHS3_indiv_clean.dta"))
 # ==============================================================================
 
 message("================================================================================")
-message("NGA_GHS3.R script execution completed successfully!")
+message("NGA_GHS3.r script execution completed successfully!")
 message(paste("Household dataset saved to:", file.path(Final_path, "NGA_GHS3_hh_clean.dta")))
 message(paste("Plot dataset saved to:", file.path(Final_path, "NGA_GHS3_plot_clean.dta")))
 message(paste("Crop dataset saved to:", file.path(Final_path, "NGA_GHS3_crop_clean.dta")))

@@ -1,5 +1,5 @@
 # ==============================================================================
-# NGA_GHS5.R - Nigeria Wave 5 (GHS 2023)
+# NGA_GHS5.r - Nigeria Wave 5 (GHS 2023)
 # LSMS-ISA Harmonised Panel Analysis Code - R Translation
 # ==============================================================================
 
@@ -1421,7 +1421,7 @@ haven::write_dta(indiv_final, file.path(Final_path, "NGA_GHS5_indiv_clean.dta"))
 # ==============================================================================
 
 message("================================================================================")
-message("NGA_GHS5.R script execution completed successfully!")
+message("NGA_GHS5.r script execution completed successfully!")
 message(paste("Household dataset saved to:", file.path(Final_path, "NGA_GHS5_hh_clean.dta")))
 message(paste("Plot dataset saved to:", file.path(Final_path, "NGA_GHS5_plot_clean.dta")))
 message(paste("Crop dataset saved to:", file.path(Final_path, "NGA_GHS5_crop_clean.dta")))

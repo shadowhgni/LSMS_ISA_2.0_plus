@@ -1,5 +1,5 @@
 # ==============================================================================
-# MLI_EACI2.R - Mali Wave 2 (EACI 2017)
+# MLI_EACI2.r - Mali Wave 2 (EACI 2017)
 # LSMS-ISA Harmonised Panel Analysis Code - R Translation
 # ==============================================================================
 
@@ -13,7 +13,7 @@ if (any(!installed)) utils::install.packages(packages[!installed])
 lapply(packages, library, character.only = TRUE)
 
 # Source helper functions
-source("R_scripts/programs.R")
+source("R_scripts/programs.r")
 
 # ==============================================================================
 # 1. SET UP PATHS AND GLOBALS

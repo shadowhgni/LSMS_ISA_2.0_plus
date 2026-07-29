@@ -1,5 +1,5 @@
 # ==============================================================================
-# programs.R - R Translation of Stata programs.do
+# programs.r - R Translation of Stata programs.do
 # LSMS-ISA Harmonised Panel Analysis Code
 # Functions for median valuations and agricultural calculations
 # 
@@ -1624,7 +1624,7 @@ valuation_median_wages_noea_S2 <- function(data, temp_path, hhid_var = "hhid",
 # END OF PROGRAM FILE
 # ==============================================================================
 
-cat("programs.R loaded successfully!\n")
+cat("programs.r loaded successfully!\n")
 cat("Available functions:\n")
 cat("  - valuation_median_crops()\n")
 cat("  - main_crop_def()\n")

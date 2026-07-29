@@ -1,5 +1,5 @@
 # ==============================================================================
-# MLI_EACI1.R - Mali Wave 1 (EACI 2014)
+# MLI_EACI1.r - Mali Wave 1 (EACI 2014)
 # LSMS-ISA Harmonised Panel Analysis Code - R Translation
 # ==============================================================================
 
@@ -13,7 +13,7 @@ if (any(!installed)) utils::install.packages(packages[!installed])
 lapply(packages, library, character.only = TRUE)
 
 # Source helper functions
-source("R_scripts/programs.R")
+source("R_scripts/programs.r")
 
 # ==============================================================================
 # 1. SET UP PATHS AND GLOBALS
@@ -609,7 +609,7 @@ tryCatch({
     dplyr::distinct()
   
   # Calculate harvest value using median crop prices
-  # This calls the valuation_median_crops function from programs.R
+  # This calls the valuation_median_crops function from programs.r
   harvest_value <- valuation_median_crops(
     data = harvest,
     temp_path = temp_dir,
